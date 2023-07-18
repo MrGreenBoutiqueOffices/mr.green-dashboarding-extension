@@ -1,0 +1,17 @@
+{
+    "type": "object",
+    "properties": {
+      "url1": {
+        "type": "string"
+      },
+      "fullscreen1": {
+        "type": "boolean"
+      },
+      "url2": {
+        "type": "string"
+      },
+      "fullscreen2": {
+        "type": "boolean"
+      }
+    }
+  }
