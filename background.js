@@ -29,7 +29,7 @@ function openTabs() {
         // Create a new window for the first display
         chrome.windows.create({url: url1, left: displays[0].bounds.left, top: displays[0].bounds.top}, function(window1) {
           // Change the state of the window to fullscreen
-          if (fullscreen1 = true) {
+          if (fullscreen1 == true) {
           chrome.windows.update(window1.id, {state: 'fullscreen'});
           }
         });
@@ -37,7 +37,7 @@ function openTabs() {
         // Create a new window for the second display
         chrome.windows.create({url: url2, left: displays[1].bounds.left, top: displays[1].bounds.top}, function(window2) {
           // Change the state of the window to fullscreen
-          if (fullscreen2 = true) {
+          if (fullscreen2 == true) {
           chrome.windows.update(window2.id, {state: 'fullscreen'});
           }
         });
