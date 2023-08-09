@@ -50,6 +50,19 @@ function openTabs() {
   }); 
 }
 
+  // Function to reload windows if URLs change
+  function reloadWindowsIfUrlsChanged(changes, namespace) {
+    if (namespace === 'managed') {
+      const url1Changed = changes.url1 && changes.url1.newValue !== changes.url1.oldValue;
+      const url2Changed = changes.url2 && changes.url2.newValue !== changes.url2.oldValue;
+
+      if (url1Changed || url2Changed) {
+        // Close existing windows (if necessary)
+        // Reopen windows with new URLs
+        openTabs();
+      }
+    }
+  }
 // Open the tabs when Chrome starts up
 chrome.runtime.onStartup.addListener(openTabs);
 
