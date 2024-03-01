@@ -65,6 +65,6 @@ function openTabs() {
   }
 // Open the tabs when Chrome starts up
 chrome.runtime.onStartup.addListener(openTabs);
-
+chrome.runtime.onConnect.addListener(openTabs)
 // Also open the tabs as soon as the extension is installed
 chrome.runtime.onInstalled.addListener(openTabs);

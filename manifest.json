@@ -4,7 +4,7 @@
   "icons": {
     "128": "icon128.png"
   },
-  "version": "1.4.1",
+  "version": "1.4.2",
   "storage": {
     "managed_schema": "schema.json"
   },
