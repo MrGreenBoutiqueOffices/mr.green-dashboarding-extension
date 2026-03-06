@@ -2,16 +2,22 @@ function openTabs() {
   // Default URLs
   const defaultUrl1 = 'http://mrgreenoffices.nl';
   const defaultUrl2 = 'http://google.com';
-  const defaultFullscreen1 = 'false'
-  const defaultFullscreen2 = 'false'
+  const defaultFullscreen1 = false;
+  const defaultFullscreen2 = false;
 
   // Retrieve the URLs from the configuration
   chrome.storage.managed.get(['url1', 'fullscreen1', 'url2', 'fullscreen2'], function(items) {
+    if (chrome.runtime.lastError) {
+      console.error('Error reading managed storage:', chrome.runtime.lastError);
+    }
+
     // Use the URLs and fullscreen settings from the configuration, or the default values if they are not provided
     const url1 = items.url1 || defaultUrl1;
-    const fullscreen1 = items.fullscreen1 || defaultFullscreen1;
+    const fullscreen1 = items.fullscreen1 !== undefined ? items.fullscreen1 : defaultFullscreen1;
     const url2 = items.url2 || defaultUrl2;
-    const fullscreen2 = items.fullscreen2 || defaultFullscreen2;
+    const fullscreen2 = items.fullscreen2 !== undefined ? items.fullscreen2 : defaultFullscreen2;
+
+    console.log('Config loaded - url1:', url1, 'fullscreen1:', fullscreen1, 'url2:', url2, 'fullscreen2:', fullscreen2);
 
     // Query the information about all connected displays
     new Promise((resolve, reject) => {
@@ -28,17 +34,25 @@ function openTabs() {
       if (displays && displays.length >= 2) {
         // Create a new window for the first display
         chrome.windows.create({url: url1, left: displays[0].bounds.left, top: displays[0].bounds.top}, function(window1) {
+          if (chrome.runtime.lastError) {
+            console.error('Error creating window 1:', chrome.runtime.lastError);
+            return;
+          }
           // Change the state of the window to fullscreen
-          if (fullscreen1 == true) {
-          chrome.windows.update(window1.id, {state: 'fullscreen'});
+          if (fullscreen1 === true) {
+            chrome.windows.update(window1.id, {state: 'fullscreen'});
           }
         });
 
         // Create a new window for the second display
         chrome.windows.create({url: url2, left: displays[1].bounds.left, top: displays[1].bounds.top}, function(window2) {
+          if (chrome.runtime.lastError) {
+            console.error('Error creating window 2:', chrome.runtime.lastError);
+            return;
+          }
           // Change the state of the window to fullscreen
-          if (fullscreen2 == true) {
-          chrome.windows.update(window2.id, {state: 'fullscreen'});
+          if (fullscreen2 === true) {
+            chrome.windows.update(window2.id, {state: 'fullscreen'});
           }
         });
       } else {
@@ -47,24 +61,30 @@ function openTabs() {
     }).catch((error) => {
       console.error('Error getting display info:', error);
     });
-  }); 
+  });
 }
 
-  // Function to reload windows if URLs change
-  function reloadWindowsIfUrlsChanged(changes, namespace) {
-    if (namespace === 'managed') {
-      const url1Changed = changes.url1 && changes.url1.newValue !== changes.url1.oldValue;
-      const url2Changed = changes.url2 && changes.url2.newValue !== changes.url2.oldValue;
+// Function to reload windows if URLs change
+function reloadWindowsIfUrlsChanged(changes, namespace) {
+  if (namespace === 'managed') {
+    const url1Changed = changes.url1 && changes.url1.newValue !== changes.url1.oldValue;
+    const url2Changed = changes.url2 && changes.url2.newValue !== changes.url2.oldValue;
 
-      if (url1Changed || url2Changed) {
-        // Close existing windows (if necessary)
-        // Reopen windows with new URLs
-        openTabs();
-      }
+    if (url1Changed || url2Changed) {
+      openTabs();
     }
   }
+}
+
 // Open the tabs when Chrome starts up
-chrome.runtime.onStartup.addListener(openTabs);
-chrome.runtime.onConnect.addListener(openTabs)
-// Also open the tabs as soon as the extension is installed
+// Delay to allow displays to fully initialize before querying them
+chrome.runtime.onStartup.addListener(() => {
+  console.log('onStartup fired, waiting for displays to initialize...');
+  setTimeout(openTabs, 3000);
+});
+
+// Also open the tabs as soon as the extension is installed/updated
 chrome.runtime.onInstalled.addListener(openTabs);
+
+// Reload windows if managed storage URLs change
+chrome.storage.onChanged.addListener(reloadWindowsIfUrlsChanged);

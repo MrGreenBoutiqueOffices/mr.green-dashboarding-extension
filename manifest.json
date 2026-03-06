@@ -9,7 +9,7 @@
     "managed_schema": "schema.json"
   },
   "manifest_version": 3,
-  "permissions": ["system.display", "storage"],
+  "permissions": ["system.display", "storage", "windows"],
   "background": {
     "service_worker": "background.js"
   }
