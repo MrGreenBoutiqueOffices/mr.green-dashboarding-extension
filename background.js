@@ -68,19 +68,24 @@ async function openSigningPage() {
   isOpening = true;
 
   try {
-    const targetUrl = await getTargetUrl();
-
     const tabs = await chrome.tabs.query({});
+
+    // Geen tabs: toon laadscherm alvast terwijl de target URL berekend wordt
+    if (tabs.length === 0) {
+      const loadingUrl = chrome.runtime.getURL('loading.html');
+      const win = await chrome.windows.create({ url: loadingUrl, state: 'fullscreen' });
+      const targetUrl = await getTargetUrl();
+      chrome.tabs.update(win.tabs[0].id, { url: targetUrl });
+      return;
+    }
+
+    const targetUrl = await getTargetUrl();
     const isTargetOpen = tabs.some(tab => tab.url && tab.url.startsWith(targetUrl));
 
     if (isTargetOpen) return;
 
-    if (tabs.length > 0) {
-      const tabToUpdate = tabs.find(t => t.active) || tabs[0];
-      chrome.tabs.update(tabToUpdate.id, { url: targetUrl });
-    } else {
-      chrome.windows.create({ url: targetUrl, state: 'fullscreen' });
-    }
+    const tabToUpdate = tabs.find(t => t.active) || tabs[0];
+    chrome.tabs.update(tabToUpdate.id, { url: targetUrl });
 
   } catch (error) {
     console.error("Error launching signing page:", error);
@@ -103,6 +108,7 @@ chrome.runtime.onInstalled.addListener(openSigningPage);
 // 2. Extra trigger voor Kiosk "Companion" modus waar een PWA eerst laadt
 chrome.tabs.onUpdated.addListener(async function (tabId, changeInfo, tab) {
   if (changeInfo.status !== 'complete' || !tab.url) return;
+  if (tab.url.startsWith('chrome-extension://') || tab.url.startsWith('chrome://')) return;
 
   const targetUrl = await getTargetUrl();
   if (tab.url.startsWith(targetUrl)) return;
