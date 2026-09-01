@@ -1,15 +1,20 @@
 {
-  "name": "Mr.Green Dashboarding",
-  "description": "A tool specifically for Mr.Green Offices to display dashboards in Kiosk mode on 2 monitors connected to 1 Chrome OS device.",
+  "name": "Mr.Green Signing",
+  "description": "Redirects kiosk device to the correct signing page based on the device's Asset ID.",
   "icons": {
     "128": "icon128.png"
   },
-  "version": "1.4.2",
+  "version": "2.0.4",
+  "manifest_version": 3,
+  "kiosk_enabled": true,
   "storage": {
     "managed_schema": "schema.json"
   },
-  "manifest_version": 3,
-  "permissions": ["system.display", "storage"],
+  "permissions": [
+    "tabs",
+    "storage",
+    "enterprise.deviceAttributes"
+  ],
   "background": {
     "service_worker": "background.js"
   }

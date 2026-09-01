@@ -1,17 +1,9 @@
 {
-    "type": "object",
-    "properties": {
-      "url1": {
-        "type": "string"
-      },
-      "fullscreen1": {
-        "type": "boolean"
-      },
-      "url2": {
-        "type": "string"
-      },
-      "fullscreen2": {
-        "type": "boolean"
-      }
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "Override URL. Gebruik {assetId} als placeholder. Indien leeg wordt de standaard signing URL gebruikt."
     }
   }
+}
