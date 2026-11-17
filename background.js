@@ -61,36 +61,55 @@ async function getTargetUrl() {
   return targetUrl;
 }
 
+const navigationQuietPeriodMs = 1_000;
+const navigationRetryCooldownMs = 30_000;
+const maxNavigationAttempts = 3;
 let isOpening = false;
+let recheckAfterOpening = false;
+let navigationAttempts = 0;
+let lastNavigationAt = 0;
 
 async function openSigningPage() {
-  if (isOpening) return;
+  if (isOpening) {
+    recheckAfterOpening = true;
+    return;
+  }
+  if (Date.now() - lastNavigationAt >= navigationRetryCooldownMs) {
+    navigationAttempts = 0;
+  }
+  if (navigationAttempts >= maxNavigationAttempts) return;
   isOpening = true;
 
   try {
     const tabs = await chrome.tabs.query({});
+    let tabToUpdate;
 
     // Geen tabs: toon laadscherm alvast terwijl de target URL berekend wordt
     if (tabs.length === 0) {
       const loadingUrl = chrome.runtime.getURL('loading.html');
       const win = await chrome.windows.create({ url: loadingUrl, state: 'fullscreen' });
-      const targetUrl = await getTargetUrl();
-      chrome.tabs.update(win.tabs[0].id, { url: targetUrl });
-      return;
+      tabToUpdate = win.tabs[0];
+    } else {
+      tabToUpdate = tabs.find(t => t.active) || tabs[0];
     }
 
     const targetUrl = await getTargetUrl();
-    const isTargetOpen = tabs.some(tab => tab.url && tab.url.startsWith(targetUrl));
+    if (tabToUpdate.url?.startsWith(targetUrl)) return;
 
-    if (isTargetOpen) return;
-
-    const tabToUpdate = tabs.find(t => t.active) || tabs[0];
-    chrome.tabs.update(tabToUpdate.id, { url: targetUrl });
-
-  } catch (error) {
-    console.error("Error launching signing page:", error);
+    navigationAttempts++;
+    lastNavigationAt = Date.now();
+    await chrome.tabs.update(tabToUpdate.id, { url: targetUrl });
+  } catch {
+    console.error("Error launching signing page");
   } finally {
-    setTimeout(() => { isOpening = false; }, 1000);
+    setTimeout(() => {
+      isOpening = false;
+      // A completion event can arrive while the previous navigation is still settling.
+      if (recheckAfterOpening) {
+        recheckAfterOpening = false;
+        void openSigningPage();
+      }
+    }, navigationQuietPeriodMs);
   }
 }
 
@@ -111,7 +130,10 @@ chrome.tabs.onUpdated.addListener(async function (tabId, changeInfo, tab) {
   if (tab.url.startsWith('chrome-extension://') || tab.url.startsWith('chrome://')) return;
 
   const targetUrl = await getTargetUrl();
-  if (tab.url.startsWith(targetUrl)) return;
+  if (tab.url.startsWith(targetUrl)) {
+    if (tab.active) navigationAttempts = 0;
+    return;
+  }
 
-  openSigningPage();
+  if (tab.active) await openSigningPage();
 });
