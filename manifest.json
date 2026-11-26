@@ -4,7 +4,7 @@
   "icons": {
     "128": "icon128.png"
   },
-  "version": "2.0.4",
+  "version": "2.1.1",
   "manifest_version": 3,
   "kiosk_enabled": true,
   "storage": {
@@ -13,7 +13,8 @@
   "permissions": [
     "tabs",
     "storage",
-    "enterprise.deviceAttributes"
+    "enterprise.deviceAttributes",
+    "alarms"
   ],
   "background": {
     "service_worker": "background.js"

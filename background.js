@@ -1,17 +1,25 @@
 // Mr.Green Signing Extension
-// Haalt het Asset ID op en opent fullscreen de juiste signing page.
+// Een onvolledige apparaatidentiteit mag nooit naar een ander scherm leiden.
+const RETRY_ALARM = 'retry-signing-start';
+const RETRY_DELAY_MINUTES = 0.5;
+const ATTRIBUTE_TIMEOUT_MS = 5000;
 
 function getAssetId() {
   return new Promise(function (resolve) {
+    const timeout = setTimeout(() => resolve(null), ATTRIBUTE_TIMEOUT_MS);
     try {
-      if (chrome.enterprise && chrome.enterprise.deviceAttributes && chrome.enterprise.deviceAttributes.getDeviceAssetId) {
-        chrome.enterprise.deviceAttributes.getDeviceAssetId(function (assetId) {
-          resolve(assetId || null);
-        });
-      } else {
+      if (!chrome.enterprise?.deviceAttributes?.getDeviceAssetId) {
+        clearTimeout(timeout);
         resolve(null);
+        return;
       }
-    } catch (e) {
+      chrome.enterprise.deviceAttributes.getDeviceAssetId(function (assetId) {
+        clearTimeout(timeout);
+        const failed = !!chrome.runtime.lastError;
+        resolve(!failed && typeof assetId === 'string' ? assetId.trim() || null : null);
+      });
+    } catch {
+      clearTimeout(timeout);
       resolve(null);
     }
   });
@@ -20,45 +28,29 @@ function getAssetId() {
 function getManagedUrl() {
   return new Promise(function (resolve) {
     try {
-      if (!chrome.storage || !chrome.storage.managed) {
-        resolve(null);
-        return;
-      }
       chrome.storage.managed.get(['url'], function (items) {
-        if (chrome.runtime.lastError || !items || !items.url) {
-          resolve(null);
-        } else {
-          resolve(items.url);
-        }
+        const failed = !!chrome.runtime.lastError;
+        resolve(!failed && typeof items?.url === 'string' ? items.url.trim() || null : null);
       });
-    } catch (e) {
+    } catch {
       resolve(null);
     }
   });
 }
 
-async function computeTargetUrl() {
-  const assetId = await getAssetId();
-  const safeAssetId = assetId || 'fallback-scherm';
-
-  const managedUrl = await getManagedUrl();
-
-  if (managedUrl) {
-    return managedUrl.replace('{assetId}', safeAssetId);
-  } else if (safeAssetId === 'fallback-scherm') {
-    return 'http://mrgreenoffices.nl';
-  } else {
-    return `https://signing.net-os.com/devices/nxd-${safeAssetId}-m/screen`;
-  }
-}
-
 async function getTargetUrl() {
-  const session = await chrome.storage.session.get('targetUrl');
-  if (session.targetUrl) return session.targetUrl;
+  const managedUrl = await getManagedUrl();
+  // Vaste URL's (zoals werkplekschermen) hebben geen Asset ID nodig.
+  if (managedUrl && !managedUrl.includes('{assetId}')) return managedUrl;
 
-  const targetUrl = await computeTargetUrl();
-  await chrome.storage.session.set({ targetUrl });
-  return targetUrl;
+  const assetId = await getAssetId();
+  if (!assetId) return null;
+
+  // Geen sessiecache: ook een aanvankelijk leeg of later gewijzigd Asset ID
+  // moet bij de volgende poging opnieuw uit Google worden gelezen.
+  return managedUrl
+    ? managedUrl.replaceAll('{assetId}', assetId)
+    : 'https://signing.net-os.com/devices/nxd-' + assetId + '-m/screen';
 }
 
 let isOpening = false;
@@ -68,50 +60,46 @@ async function openSigningPage() {
   isOpening = true;
 
   try {
-    const tabs = await chrome.tabs.query({});
-
-    // Geen tabs: toon laadscherm alvast terwijl de target URL berekend wordt
-    if (tabs.length === 0) {
-      const loadingUrl = chrome.runtime.getURL('loading.html');
-      const win = await chrome.windows.create({ url: loadingUrl, state: 'fullscreen' });
-      const targetUrl = await getTargetUrl();
-      chrome.tabs.update(win.tabs[0].id, { url: targetUrl });
-      return;
+    const targetUrl = await getTargetUrl();
+    if (targetUrl) {
+      await chrome.alarms.clear(RETRY_ALARM);
+    } else {
+      // Een alarm kan de MV3-worker opnieuw activeren; een losse timer niet.
+      await chrome.alarms.create(RETRY_ALARM, { delayInMinutes: RETRY_DELAY_MINUTES });
     }
 
-    const targetUrl = await getTargetUrl();
-    const isTargetOpen = tabs.some(tab => tab.url && tab.url.startsWith(targetUrl));
+    const url = targetUrl || chrome.runtime.getURL('loading.html');
+    const tabs = await chrome.tabs.query({});
+    if (tabs.some(tab => tab.url && tab.url.startsWith(url))) return;
 
-    if (isTargetOpen) return;
-
-    const tabToUpdate = tabs.find(t => t.active) || tabs[0];
-    chrome.tabs.update(tabToUpdate.id, { url: targetUrl });
-
-  } catch (error) {
-    console.error("Error launching signing page:", error);
+    if (tabs.length === 0) {
+      await chrome.windows.create({ url, state: 'fullscreen' });
+    } else {
+      const tab = tabs.find(t => t.active) || tabs[0];
+      await chrome.tabs.update(tab.id, { url });
+    }
+  } catch {
+    // Log nooit de doel-URL: die kan een schermtoken bevatten.
+    console.error('Signing start failed; retrying.');
+    await chrome.alarms.create(RETRY_ALARM, { delayInMinutes: RETRY_DELAY_MINUTES });
   } finally {
-    setTimeout(() => { isOpening = false; }, 1000);
+    isOpening = false;
   }
 }
 
-// Invalideer de cache als de managed URL verandert
 chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (namespace === 'managed' && changes.url) {
-    chrome.storage.session.remove('targetUrl');
-  }
+  if (namespace === 'managed' && changes.url) return openSigningPage();
 });
 
-// 1. Trigger via standaard boot hooks
 chrome.runtime.onStartup.addListener(openSigningPage);
 chrome.runtime.onInstalled.addListener(openSigningPage);
+chrome.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name === RETRY_ALARM) return openSigningPage();
+});
 
-// 2. Extra trigger voor Kiosk "Companion" modus waar een PWA eerst laadt
-chrome.tabs.onUpdated.addListener(async function (tabId, changeInfo, tab) {
+// Companion-modus: de PWA kan eerder laden dan de extensie.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== 'complete' || !tab.url) return;
   if (tab.url.startsWith('chrome-extension://') || tab.url.startsWith('chrome://')) return;
-
-  const targetUrl = await getTargetUrl();
-  if (tab.url.startsWith(targetUrl)) return;
-
-  openSigningPage();
+  return openSigningPage();
 });

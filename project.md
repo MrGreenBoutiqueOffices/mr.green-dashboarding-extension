@@ -1,3 +1,7 @@
+# Update 2.1.1 (26 november 2026)
+
+Tijdelijk lege Asset ID's worden opnieuw gelezen via een Chrome-alarm; er is geen doel-URL-sessiecache of fictief fallback-scherm meer. Zie readme.md voor tests en release. De status en Supabase-plannen hieronder zijn historische notities; de huidige extensie verstuurt geen logs naar Supabase.
+
 # Mr.Green Dashboarding Extension - Project Status
 
 ## Huidige Status
